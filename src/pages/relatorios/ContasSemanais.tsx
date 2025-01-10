@@ -31,33 +31,21 @@ import jsPDF from 'jspdf';
 
 interface CompanyData {
   name: string;
+  ownerName: string;
   cnpj: string;
-  address: string;
 }
 
-interface TotalData {
-  totalReceivable: string;
-  totalPayable: string;
-  balance: string;
+interface FinancialData {
+  totalPayable: number;
+  totalReceivable: number;
+  balance: number;
 }
 
-interface AccountEntry {
+interface PaymentEntry {
   date: string;
   description: string;
-  value: string;
-  status: string;
-}
-
-interface AccountData {
-  payable: AccountEntry[];
-  receivable: AccountEntry[];
-}
-
-interface VariablePosition {
-  id: string;
-  label: string;
-  x: number;
-  y: number;
+  value: number;
+  status: 'pending' | 'paid' | 'overdue';
 }
 
 export default function ContasSemanais() {
@@ -66,34 +54,50 @@ export default function ContasSemanais() {
   const [backgroundSvg, setBackgroundSvg] = useState<string | null>(null);
   const [showPositionConfig, setShowPositionConfig] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
-  
-  // Data state
+
+  // Company and Financial Data state
   const [companyData, setCompanyData] = useState<CompanyData>({
     name: '',
-    cnpj: '',
-    address: ''
-  });
-  
-  const [totalData, setTotalData] = useState<TotalData>({
-    totalReceivable: '',
-    totalPayable: '',
-    balance: ''
-  });
-  
-  const [accountData, setAccountData] = useState<AccountData>({
-    payable: Array(5).fill({ date: '', description: '', value: '', status: '' }),
-    receivable: Array(5).fill({ date: '', description: '', value: '', status: '' })
+    ownerName: '',
+    cnpj: ''
   });
 
-  // Variable positions state
-  const [variablePositions, setVariablePositions] = useState<VariablePosition[]>([
-    { id: 'company-name', label: 'Nome da Empresa', x: 0, y: 0 },
-    { id: 'cnpj', label: 'CNPJ', x: 0, y: 50 },
-    { id: 'address', label: 'Endereço', x: 0, y: 100 },
-    { id: 'total-receivable', label: 'Total a Receber', x: 0, y: 150 },
-    { id: 'total-payable', label: 'Total a Pagar', x: 0, y: 200 },
-    { id: 'balance', label: 'Saldo', x: 0, y: 250 },
-  ]);
+  const [financialData, setFinancialData] = useState<FinancialData>({
+    totalPayable: 0,
+    totalReceivable: 0,
+    balance: 0
+  });
+
+  // Payment entries state
+  const [payableEntries, setPayableEntries] = useState<PaymentEntry[]>([]);
+  const [receivableEntries, setReceivableEntries] = useState<PaymentEntry[]>([]);
+
+  const handleAddPayableEntry = () => {
+    const newEntry: PaymentEntry = {
+      date: '',
+      description: '',
+      value: 0,
+      status: 'pending'
+    };
+    setPayableEntries([...payableEntries, newEntry]);
+  };
+
+  const handleAddReceivableEntry = () => {
+    const newEntry: PaymentEntry = {
+      date: '',
+      description: '',
+      value: 0,
+      status: 'pending'
+    };
+    setReceivableEntries([...receivableEntries, newEntry]);
+  };
+
+  const formatCurrency = (value: number) => {
+    return new Intl.NumberFormat('pt-BR', {
+      style: 'currency',
+      currency: 'BRL'
+    }).format(value);
+  };
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -119,70 +123,253 @@ export default function ContasSemanais() {
     }
   };
 
-  const handleDragStop = (id: string, e: any, data: { x: number; y: number }) => {
-    setVariablePositions(prev => prev.map(pos => 
-      pos.id === id ? { ...pos, x: data.x, y: data.y } : pos
-    ));
-  };
-
-  const generatePDF = () => {
-    try {
-      // Create new PDF document with A4 dimensions (2480x3508 px at 300 DPI)
-      const pdf = new jsPDF({
-        orientation: 'portrait',
-        unit: 'px',
-        format: [2480, 3508]
-      });
-
-      // Add background if exists
-      if (backgroundSvg) {
-        pdf.addImage(backgroundSvg, 'SVG', 0, 0, 2480, 3508);
-      }
-
-      // Add variables in their positions
-      variablePositions.forEach(variable => {
-        let value = '';
-        switch (variable.id) {
-          case 'company-name':
-            value = companyData.name;
-            break;
-          case 'cnpj':
-            value = companyData.cnpj;
-            break;
-          case 'address':
-            value = companyData.address;
-            break;
-          case 'total-receivable':
-            value = totalData.totalReceivable;
-            break;
-          case 'total-payable':
-            value = totalData.totalPayable;
-            break;
-          case 'balance':
-            value = totalData.balance;
-            break;
-        }
-        pdf.text(value, variable.x, variable.y);
-      });
-
-      // Save the PDF
-      pdf.save('relatorio-semanal.pdf');
-
-      toast({
-        title: "PDF Gerado",
-        description: "O relatório foi gerado e baixado com sucesso.",
-      });
-    } catch (error) {
-      toast({
-        title: "Erro ao gerar PDF",
-        description: "Ocorreu um erro ao gerar o relatório.",
-        variant: "destructive",
-      });
-    }
-  };
-
   return (
     <div className="space-y-6">
+      {/* Company Data Section */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Dados da Empresa</CardTitle>
+          <CardDescription>
+            Informações básicas da empresa para o relatório
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid grid-cols-3 gap-4">
+          <div className="space-y-2">
+            <Label>Nome da Empresa</Label>
+            <Input
+              value={companyData.name}
+              onChange={(e) => setCompanyData({ ...companyData, name: e.target.value })}
+              placeholder="Razão Social"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>Nome do Sócio</Label>
+            <Input
+              value={companyData.ownerName}
+              onChange={(e) => setCompanyData({ ...companyData, ownerName: e.target.value })}
+              placeholder="Nome completo"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>CNPJ</Label>
+            <Input
+              value={companyData.cnpj}
+              onChange={(e) => setCompanyData({ ...companyData, cnpj: e.target.value })}
+              placeholder="00.000.000/0000-00"
+            />
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Financial Totals Section */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Totais Financeiros</CardTitle>
+          <CardDescription>
+            Resumo dos valores a pagar, receber e saldo
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid grid-cols-3 gap-4">
+          <div className="space-y-2">
+            <Label>Total a Pagar</Label>
+            <Input
+              type="number"
+              value={financialData.totalPayable}
+              onChange={(e) => setFinancialData({ 
+                ...financialData, 
+                totalPayable: Number(e.target.value),
+                balance: Number(e.target.value) - financialData.totalReceivable
+              })}
+              className="text-red-500 font-medium"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>Total a Receber</Label>
+            <Input
+              type="number"
+              value={financialData.totalReceivable}
+              onChange={(e) => setFinancialData({ 
+                ...financialData, 
+                totalReceivable: Number(e.target.value),
+                balance: financialData.totalPayable - Number(e.target.value)
+              })}
+              className="text-green-500 font-medium"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>Saldo Total</Label>
+            <Input
+              value={formatCurrency(financialData.balance)}
+              readOnly
+              className={`font-medium ${financialData.balance >= 0 ? 'text-green-500' : 'text-red-500'}`}
+            />
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Accounts Tables Section */}
+      <div className="grid grid-cols-2 gap-6">
+        {/* Payable Accounts */}
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle>Contas a Pagar</CardTitle>
+              <Button onClick={handleAddPayableEntry}>
+                <Plus className="h-4 w-4 mr-2" />
+                Adicionar
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="rounded-md border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Data</TableHead>
+                    <TableHead>Descrição</TableHead>
+                    <TableHead>Valor</TableHead>
+                    <TableHead>Status</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {payableEntries.map((entry, index) => (
+                    <TableRow key={index}>
+                      <TableCell>
+                        <Input
+                          type="date"
+                          value={entry.date}
+                          onChange={(e) => {
+                            const newEntries = [...payableEntries];
+                            newEntries[index].date = e.target.value;
+                            setPayableEntries(newEntries);
+                          }}
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Input
+                          value={entry.description}
+                          onChange={(e) => {
+                            const newEntries = [...payableEntries];
+                            newEntries[index].description = e.target.value;
+                            setPayableEntries(newEntries);
+                          }}
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Input
+                          type="number"
+                          value={entry.value}
+                          onChange={(e) => {
+                            const newEntries = [...payableEntries];
+                            newEntries[index].value = Number(e.target.value);
+                            setPayableEntries(newEntries);
+                          }}
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <select
+                          className="w-full rounded-md border border-input bg-background px-3 py-1"
+                          value={entry.status}
+                          onChange={(e) => {
+                            const newEntries = [...payableEntries];
+                            newEntries[index].status = e.target.value as PaymentEntry['status'];
+                            setPayableEntries(newEntries);
+                          }}
+                        >
+                          <option value="pending">Pendente</option>
+                          <option value="paid">Pago</option>
+                          <option value="overdue">Atrasado</option>
+                        </select>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Receivable Accounts */}
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle>Contas a Receber</CardTitle>
+              <Button onClick={handleAddReceivableEntry}>
+                <Plus className="h-4 w-4 mr-2" />
+                Adicionar
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="rounded-md border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Data</TableHead>
+                    <TableHead>Descrição</TableHead>
+                    <TableHead>Valor</TableHead>
+                    <TableHead>Status</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {receivableEntries.map((entry, index) => (
+                    <TableRow key={index}>
+                      <TableCell>
+                        <Input
+                          type="date"
+                          value={entry.date}
+                          onChange={(e) => {
+                            const newEntries = [...receivableEntries];
+                            newEntries[index].date = e.target.value;
+                            setReceivableEntries(newEntries);
+                          }}
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Input
+                          value={entry.description}
+                          onChange={(e) => {
+                            const newEntries = [...receivableEntries];
+                            newEntries[index].description = e.target.value;
+                            setReceivableEntries(newEntries);
+                          }}
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Input
+                          type="number"
+                          value={entry.value}
+                          onChange={(e) => {
+                            const newEntries = [...receivableEntries];
+                            newEntries[index].value = Number(e.target.value);
+                            setReceivableEntries(newEntries);
+                          }}
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <select
+                          className="w-full rounded-md border border-input bg-background px-3 py-1"
+                          value={entry.status}
+                          onChange={(e) => {
+                            const newEntries = [...receivableEntries];
+                            newEntries[index].status = e.target.value as PaymentEntry['status'];
+                            setReceivableEntries(newEntries);
+                          }}
+                        >
+                          <option value="pending">Pendente</option>
+                          <option value="paid">Recebido</option>
+                          <option value="overdue">Atrasado</option>
+                        </select>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
       {/* Background Upload Section */}
       <Card>
         <CardHeader>
@@ -225,89 +412,6 @@ export default function ContasSemanais() {
           </div>
         </CardContent>
       </Card>
-
-      {/* Rest of the components remain the same until the dialogs */}
-
-      {/* Position Configuration Dialog with improved usability */}
-      <Dialog open={showPositionConfig} onOpenChange={setShowPositionConfig}>
-        <DialogContent className="max-w-7xl">
-          <DialogHeader>
-            <DialogTitle>Configurar Posições das Variáveis</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-4 mb-4">
-              {variablePositions.map((variable) => (
-                <div key={variable.id} className="flex items-center justify-between p-4 border rounded-lg">
-                  <span className="font-medium">{variable.label}</span>
-                  <div className="flex items-center gap-2">
-                    <div className="space-y-1">
-                      <Label className="text-xs">X</Label>
-                      <Input
-                        type="number"
-                        value={variable.x}
-                        onChange={(e) => {
-                          const x = parseInt(e.target.value);
-                          setVariablePositions(prev => prev.map(pos =>
-                            pos.id === variable.id ? { ...pos, x } : pos
-                          ));
-                        }}
-                        className="w-24"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs">Y</Label>
-                      <Input
-                        type="number"
-                        value={variable.y}
-                        onChange={(e) => {
-                          const y = parseInt(e.target.value);
-                          setVariablePositions(prev => prev.map(pos =>
-                            pos.id === variable.id ? { ...pos, y } : pos
-                          ));
-                        }}
-                        className="w-24"
-                      />
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-            <div className="w-full overflow-hidden bg-gray-100 dark:bg-gray-800 rounded-lg">
-              <div 
-                className="w-[2480px] h-[3508px] origin-top-left relative"
-                style={{ 
-                  transform: 'scale(0.2)',
-                  backgroundImage: backgroundSvg ? `url(${backgroundSvg})` : undefined,
-                  backgroundSize: 'cover',
-                  backgroundPosition: 'center',
-                  backgroundRepeat: 'no-repeat'
-                }}
-              >
-                {variablePositions.map((variable) => (
-                  <Draggable
-                    key={variable.id}
-                    position={{ x: variable.x, y: variable.y }}
-                    onStop={(e, data) => handleDragStop(variable.id, e, data)}
-                    bounds="parent"
-                  >
-                    <div className="absolute cursor-move bg-white dark:bg-gray-800 p-2 rounded shadow-lg border border-gray-200 dark:border-gray-700">
-                      <span className="text-sm font-medium">{variable.label}</span>
-                    </div>
-                  </Draggable>
-                ))}
-              </div>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowPositionConfig(false)}>
-              Cancelar
-            </Button>
-            <Button onClick={() => setShowPositionConfig(false)}>
-              Salvar Posições
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       {/* Preview Dialog */}
       <Dialog open={showPreview} onOpenChange={setShowPreview}>
