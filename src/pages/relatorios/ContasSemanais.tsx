@@ -26,6 +26,8 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
+import Draggable from 'react-draggable';
+import jsPDF from 'jspdf';
 
 interface CompanyData {
   name: string;
@@ -49,6 +51,13 @@ interface AccountEntry {
 interface AccountData {
   payable: AccountEntry[];
   receivable: AccountEntry[];
+}
+
+interface VariablePosition {
+  id: string;
+  label: string;
+  x: number;
+  y: number;
 }
 
 export default function ContasSemanais() {
@@ -75,6 +84,16 @@ export default function ContasSemanais() {
     receivable: Array(5).fill({ date: '', description: '', value: '', status: '' })
   });
 
+  // Variable positions state
+  const [variablePositions, setVariablePositions] = useState<VariablePosition[]>([
+    { id: 'company-name', label: 'Nome da Empresa', x: 0, y: 0 },
+    { id: 'cnpj', label: 'CNPJ', x: 0, y: 50 },
+    { id: 'address', label: 'Endereço', x: 0, y: 100 },
+    { id: 'total-receivable', label: 'Total a Receber', x: 0, y: 150 },
+    { id: 'total-payable', label: 'Total a Pagar', x: 0, y: 200 },
+    { id: 'balance', label: 'Saldo', x: 0, y: 250 },
+  ]);
+
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
@@ -95,25 +114,66 @@ export default function ContasSemanais() {
     }
   };
 
-  const updateAccountEntry = (
-    type: 'payable' | 'receivable',
-    index: number,
-    field: keyof AccountEntry,
-    value: string
-  ) => {
-    setAccountData(prev => ({
-      ...prev,
-      [type]: prev[type].map((entry, i) => 
-        i === index ? { ...entry, [field]: value } : entry
-      )
-    }));
+  const handleDragStop = (id: string, e: any, data: { x: number; y: number }) => {
+    setVariablePositions(prev => prev.map(pos => 
+      pos.id === id ? { ...pos, x: data.x, y: data.y } : pos
+    ));
   };
 
   const generatePDF = () => {
-    toast({
-      title: "Gerando PDF",
-      description: "Função em desenvolvimento...",
-    });
+    try {
+      // Create new PDF document
+      const pdf = new jsPDF({
+        orientation: 'landscape',
+        unit: 'px',
+        format: [1920, 1080]
+      });
+
+      // Add background if exists
+      if (backgroundSvg) {
+        pdf.addImage(backgroundSvg, 'SVG', 0, 0, 1920, 1080);
+      }
+
+      // Add variables in their positions
+      variablePositions.forEach(variable => {
+        let value = '';
+        switch (variable.id) {
+          case 'company-name':
+            value = companyData.name;
+            break;
+          case 'cnpj':
+            value = companyData.cnpj;
+            break;
+          case 'address':
+            value = companyData.address;
+            break;
+          case 'total-receivable':
+            value = totalData.totalReceivable;
+            break;
+          case 'total-payable':
+            value = totalData.totalPayable;
+            break;
+          case 'balance':
+            value = totalData.balance;
+            break;
+        }
+        pdf.text(value, variable.x, variable.y);
+      });
+
+      // Save the PDF
+      pdf.save('relatorio-semanal.pdf');
+
+      toast({
+        title: "PDF Gerado",
+        description: "O relatório foi gerado e baixado com sucesso.",
+      });
+    } catch (error) {
+      toast({
+        title: "Erro ao gerar PDF",
+        description: "Ocorreu um erro ao gerar o relatório.",
+        variant: "destructive",
+      });
+    }
   };
 
   return (
@@ -245,27 +305,43 @@ export default function ContasSemanais() {
                       <Input
                         type="date"
                         value={entry.date}
-                        onChange={(e) => updateAccountEntry('payable', index, 'date', e.target.value)}
+                        onChange={(e) => {
+                          const newPayable = [...accountData.payable];
+                          newPayable[index] = { ...entry, date: e.target.value };
+                          setAccountData({ ...accountData, payable: newPayable });
+                        }}
                       />
                     </TableCell>
                     <TableCell>
                       <Input
                         value={entry.description}
-                        onChange={(e) => updateAccountEntry('payable', index, 'description', e.target.value)}
+                        onChange={(e) => {
+                          const newPayable = [...accountData.payable];
+                          newPayable[index] = { ...entry, description: e.target.value };
+                          setAccountData({ ...accountData, payable: newPayable });
+                        }}
                         placeholder="Descrição"
                       />
                     </TableCell>
                     <TableCell>
                       <Input
                         value={entry.value}
-                        onChange={(e) => updateAccountEntry('payable', index, 'value', e.target.value)}
+                        onChange={(e) => {
+                          const newPayable = [...accountData.payable];
+                          newPayable[index] = { ...entry, value: e.target.value };
+                          setAccountData({ ...accountData, payable: newPayable });
+                        }}
                         placeholder="R$ 0,00"
                       />
                     </TableCell>
                     <TableCell>
                       <Input
                         value={entry.status}
-                        onChange={(e) => updateAccountEntry('payable', index, 'status', e.target.value)}
+                        onChange={(e) => {
+                          const newPayable = [...accountData.payable];
+                          newPayable[index] = { ...entry, status: e.target.value };
+                          setAccountData({ ...accountData, payable: newPayable });
+                        }}
                         placeholder="Status"
                       />
                     </TableCell>
@@ -298,27 +374,43 @@ export default function ContasSemanais() {
                       <Input
                         type="date"
                         value={entry.date}
-                        onChange={(e) => updateAccountEntry('receivable', index, 'date', e.target.value)}
+                        onChange={(e) => {
+                          const newReceivable = [...accountData.receivable];
+                          newReceivable[index] = { ...entry, date: e.target.value };
+                          setAccountData({ ...accountData, receivable: newReceivable });
+                        }}
                       />
                     </TableCell>
                     <TableCell>
                       <Input
                         value={entry.description}
-                        onChange={(e) => updateAccountEntry('receivable', index, 'description', e.target.value)}
+                        onChange={(e) => {
+                          const newReceivable = [...accountData.receivable];
+                          newReceivable[index] = { ...entry, description: e.target.value };
+                          setAccountData({ ...accountData, receivable: newReceivable });
+                        }}
                         placeholder="Descrição"
                       />
                     </TableCell>
                     <TableCell>
                       <Input
                         value={entry.value}
-                        onChange={(e) => updateAccountEntry('receivable', index, 'value', e.target.value)}
+                        onChange={(e) => {
+                          const newReceivable = [...accountData.receivable];
+                          newReceivable[index] = { ...entry, value: e.target.value };
+                          setAccountData({ ...accountData, receivable: newReceivable });
+                        }}
                         placeholder="R$ 0,00"
                       />
                     </TableCell>
                     <TableCell>
                       <Input
                         value={entry.status}
-                        onChange={(e) => updateAccountEntry('receivable', index, 'status', e.target.value)}
+                        onChange={(e) => {
+                          const newReceivable = [...accountData.receivable];
+                          newReceivable[index] = { ...entry, status: e.target.value };
+                          setAccountData({ ...accountData, receivable: newReceivable });
+                        }}
                         placeholder="Status"
                       />
                     </TableCell>
@@ -349,34 +441,6 @@ export default function ContasSemanais() {
         </Button>
       </div>
 
-      {/* Preview Section */}
-      {backgroundSvg && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Visualização do Relatório</CardTitle>
-            <CardDescription>
-              Prévia do relatório em tamanho real (1920x1080)
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="w-full overflow-hidden bg-gray-100 dark:bg-gray-800 rounded-lg">
-              <div 
-                className="w-[1920px] h-[1080px] origin-top-left"
-                style={{ 
-                  transform: 'scale(0.5)',
-                  backgroundImage: `url(${backgroundSvg})`,
-                  backgroundSize: 'cover',
-                  backgroundPosition: 'center',
-                  backgroundRepeat: 'no-repeat'
-                }}
-              >
-                {/* Preview content will be rendered here */}
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
       {/* Position Configuration Dialog */}
       <Dialog open={showPositionConfig} onOpenChange={setShowPositionConfig}>
         <DialogContent className="max-w-7xl">
@@ -394,7 +458,18 @@ export default function ContasSemanais() {
                 backgroundRepeat: 'no-repeat'
               }}
             >
-              {/* Draggable variables will be rendered here */}
+              {variablePositions.map((variable) => (
+                <Draggable
+                  key={variable.id}
+                  position={{ x: variable.x, y: variable.y }}
+                  onStop={(e, data) => handleDragStop(variable.id, e, data)}
+                  bounds="parent"
+                >
+                  <div className="absolute cursor-move bg-white dark:bg-gray-800 p-2 rounded shadow-lg border border-gray-200 dark:border-gray-700">
+                    <span className="text-sm font-medium">{variable.label}</span>
+                  </div>
+                </Draggable>
+              ))}
             </div>
           </div>
           <DialogFooter>
